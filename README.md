@@ -1,165 +1,150 @@
-﻿# export_chat — экспорт диалогов AutoClaw
+﻿# AutoClaw.Z.ai-ExportChat
 
-Утилита командной строки: читает локальную базу AutoClaw и сохраняет переписку в один файл — Markdown, обычный текст или JSON.
+export AutoClaw chats to Markdown, TXT and JSON
 
-Неофициальный инструмент. Не связан с Z.ai, работает только с локальной базой, в сеть не ходит.
+A command-line utility that reads AutoClaw's local database and saves a conversation to a single file — Markdown, plain text or JSON.
 
-## Возможности
+Unofficial tool. Not affiliated with Z.ai, works only with the local database and never goes online.
 
-- список всех диалогов: дата, число запросов, название;
-- экспорт одного диалога (по id или части названия) или всех сразу;
-- три формата: `.md`, `.txt`, `.json`;
-- в обычном (коротком) выводе видны имена вложенных файлов и файлов, готовых к скачиванию;
-- с флагом `--tools` — вызовы инструментов с аргументами и результатом;
-- база открывается только на чтение, приложение можно не закрывать;
-- интерфейс и содержимое — на русском языке.
+**English** · [Русский](README.ru.md) · [中文](README.zh.md)
 
-## Требования
+Version 1.1.
 
-- Windows 10 или 11;
-- Python 3.10+ — либо тот, что поставляется вместе с AutoClaw (bat-файл находит его сам).
+## Features
 
-Отдельно ставить Python не нужно, если AutoClaw уже установлен.
+- list every conversation: date, number of requests, title;
+- export one conversation (by id or part of the title) or all of them at once;
+- three output formats: `.md`, `.txt`, `.json`;
+- the default (short) output shows the names of attached files and of files ready to download;
+- `/tools` adds tool calls with arguments and results;
+- the database is opened read-only, so the app can keep running;
+- output labels in Russian (default), English or Chinese — switch with `/lang ru|en|zh`.
 
-## Установка
+## Requirements
 
-1. Скачайте `export_chat.py` и `export_chat.bat` в одну папку.
-2. Всё. Запускайте `export_chat.bat`.
+- Windows 10 or 11;
+- Python 3.10+ — or the interpreter bundled with AutoClaw (the `.bat` finds it automatically).
 
-## Быстрый старт
+No separate Python installation is needed if AutoClaw is already installed.
 
-Двойной клик по `export_chat.bat` — выгрузит последний диалог в `.md` рядом со скриптом.
+## Installation
 
-Из консоли:
+1. Download `export_chat.py` and `export_chat.bat` into one folder.
+2. That is all — run `export_chat.bat`.
+
+## Quick start
+
+Running with no arguments (including a double-click on `export_chat.bat`) prints a short English help screen with the main options and the link to the repository. An export always needs an explicit option.
+
+
+
+From a console:
 
 ```bat
-cd C:\путь\к\папке
-export_chat.bat --list
-export_chat.bat --session кредиты --out чат.md
-export_chat.bat --session Kimi --format txt --out kimi.txt
+cd C:\path\to\folder
+export_chat.bat /list
+export_chat.bat /chat credits /out chat.md
+export_chat.bat /chat Kimi /format txt /out kimi.txt
 ```
 
-Если Python установлен в системе и доступен как `python`:
+With a system Python available as `python`:
 
 ```powershell
-python export_chat.py --list
-python export_chat.py --session bb5900ba --format json --out chat.json
+python export_chat.py /list
+python export_chat.py /chat bb5900ba /format json /out chat.json
 ```
 
-## Команды и флаги
+## Options
 
-| Флаг | Что делает |
+| Option | Description |
 | --- | --- |
-| `--list` | Показать все диалоги: id, дата обновления, число запросов, название |
-| `--session <id\|часть названия>` | Какой диалог выгружать. По умолчанию — самый свежий |
-| `--out <файл>` | Имя файла результата |
-| `--all` | Выгрузить все диалоги по одному файлу на каждый |
-| `--out-dir <папка>` | Куда складывать при `--all` (по умолчанию `chat-exports`) |
-| `--format md\|txt\|json` | Формат вывода (по умолчанию `md`) |
-| `--tools` | Добавить вызовы инструментов с аргументами и результатом |
-| `--narration` | Добавить промежуточные реплики ассистента |
-| `--no-files` | Не показывать блоки файлов |
-| `--all-files` | Показывать и служебные файлы (скрипты, черновики) |
-| `--tool-limit <N>` | Сколько символов результата инструмента оставлять (по умолчанию 4000) |
-| `--bom` / `--no-bom` | Принудительно включить или выключить BOM |
-| `--db <путь>` | Указать `runtime.sqlite` вручную |
-| `--version` | Показать версию |
+| `/list` | Show all conversations: id, last update, number of requests, title |
+| `/chat <id\|part of title>` | Which conversation to export. Default: the most recent one |
+| `/out <file>` | Output file name |
+| `/all` | Export every conversation, one file per conversation |
+| `/out-dir <folder>` | Destination folder for `/all` (default `chat-exports`) |
+| `/format md\|txt\|json` | Output format (default `md`) |
+| `/lang ru\|en\|zh` | Language of the labels in the exported file and of console messages (default `ru`) |
+| `/tools` | Include tool calls with arguments and results |
+| `/narration` | Include intermediate assistant remarks |
+| `/no-files` | Hide the file blocks |
+| `/all-files` | Also show service files (scripts, drafts) |
+| `/tool-limit <N>` | How many characters of a tool result to keep (default 4000) |
+| `/no-bom` | Do not write the BOM (`EF BB BF`) at the start of md and txt files |
+| `/db <path>` | Point to `runtime.sqlite` explicitly |
+| `/ver` | Print the version |
 
-## Примеры
+## Examples
 
 ```bat
-:: список диалогов
-export_chat.bat --list
+:: list conversations
+export_chat.bat /list
 
-:: один диалог в Markdown, с инструментами и служебными файлами
-export_chat.bat --session "экспорт чатов" --tools --all-files --out full.md
+:: one conversation in Markdown, with tools and service files
+export_chat.bat /chat "chat export" /tools /all-files /out full.md
 
-:: все диалоги в JSON
-export_chat.bat --all --format json --out-dir exports
+:: every conversation in JSON
+export_chat.bat /all /format json /out-dir exports
 ```
 
-## Что получается в файле
+## Files in the export
 
-```markdown
-# Покупка кредитов autoclaw
+- **Attached** — taken from the `Attached workspace files` block in the request text: name, type, size. The block itself is removed from the message body.
+- **Created** — read from the `governed_tool_artifacts` table and linked by `tool_call_id`, so a file lands in the turn where it appeared.
+- **"Ready to download"** — files the agent handed over through `deliver_file`.
+- **`/all-files`** — additionally shows everything created along the way: scripts, drafts, patches.
 
-- **Сессия:** "bb5900ba-9c1d-49d9-aecb-80cca1d3c3a3"
-- **Создана:** 20.10.2026 15:51
-- **Обновлена:** 22.10.2026 11:13
-- **Сообщений:** 11 запросов, 10 ответов
-- **Файлы:** вложено 1 · готово к скачиванию 2
-- **Экспорт:** 22.10.2026 11:40
+File names are printed in double quotes; service directives such as `:zwork-file-citation{...}` never reach the output.
 
-## 1. Вы — 20.10.2026 15:51
+## Formats
 
-можно ли купить кредиты по российской карте Мир ?
-а через paypal ?
-
-**📎 Вложено:**
-- "Аудит обзора Kimi — рекомендации для препринта v2.9.docx" — docx, 42,5 КБ
-
-### AutoClaw — 20.10.2026 15:52
-
-Коротко: картой «Мир» — нет.
-
-**📄 Готово к скачиванию:**
-- "export_chat.py" — py, 31,9 КБ
-```
-
-## Файлы в экспорте
-
-- **Вложенные** — берутся из блока `Attached workspace files` в тексте запроса: имя, тип, размер. Сам блок из текста убирается.
-- **Созданные** — из таблицы `governed_tool_artifacts`, привязка по `tool_call_id`, поэтому файл попадает в тот ход, где он появился.
-- **«Готово к скачиванию»** — то, что агент отдал через `deliver_file`.
-- **`--all-files`** — дополнительно показывает всё, что создавалось по ходу: скрипты, черновики, патчи.
-
-Имена файлов выводятся в кавычках, служебные директивы вида `:zwork-file-citation{...}` в текст не попадают.
-
-## Форматы
-
-| Формат | Что внутри |
+| Format | Content |
 | --- | --- |
-| `md` | Разметка сохраняется как есть: заголовки, списки, таблицы, код |
-| `txt` | Разметка разбирается в чистый текст: без `**`, обратных кавычек, `#`, табличных `\|`; списки становятся `•`, ссылки — `текст (адрес)` |
-| `json` | Структура: `session` + `turns[]`, в каждом ходе `request`, `attachments`, `answers`, `citations`, `files` |
+| `md` | Markdown kept as is: headings, lists, tables, code |
+| `txt` | Markdown stripped to plain text: no `**`, backticks, `#`, table pipes; lists become `•`, links become `text (url)` |
+| `json` | Structure: `session` plus `turns[]`, each turn holds `request`, `attachments`, `answers`, `citations`, `files` |
 
-BOM (три байта `EF BB BF`) добавляется по умолчанию в `.md` и `.txt`, чтобы Блокнот и Excel правильно определяли кодировку. В `.json` его нет намеренно — строгие JSON-парсеры на BOM спотыкаются; при необходимости включается флагом `--bom`.
+A UTF-8 BOM (three bytes `EF BB BF`) is written by default to `.md` and `.txt`. JSON files never get a BOM — strict parsers reject it. Use `/no-bom` to disable the BOM for text files.
 
-## Как это работает
+## How it works
 
-Читается файл `runtime.sqlite` из профиля AutoClaw:
+The tool reads `runtime.sqlite` from the AutoClaw profile:
 
 ```
 %APPDATA%\AutoClaw-oversea-official\accounts\<id>\runtime\runtime.sqlite
 ```
 
-Используются три таблицы:
+Three tables are used:
 
-- `work_sessions` — список диалогов;
-- `neutral_session_entries` — сообщения (запросы, ответы, вызовы инструментов);
-- `governed_tool_artifacts` — созданные файлы.
+- `work_sessions` — the list of conversations;
+- `neutral_session_entries` — messages (requests, answers, tool calls);
+- `governed_tool_artifacts` — created files.
 
-Соединение открывается в режиме `mode=ro`, никаких записей в базу нет.
+The connection is opened in `mode=ro`; nothing is ever written to the database.
 
-## Ограничения
+## Limitations
 
-- Схема базы внутренняя и недокументированная: обновление AutoClaw может её изменить. При поломке скрипт скажет, в чём дело, а не испортит данные.
-- В `txt` теряется форматирование — это его назначение.
-- С `--tools` файл быстро растёт: в одном ходе бывает 60+ вызовов.
-- Картинки и бинарники не выгружаются — только имена, типы и размеры.
-- Инструмент не связан с Z.ai; это не официальный экспорт.
+- The database schema is internal and undocumented: an AutoClaw update may change it. When that happens the script reports the problem instead of damaging data.
+- `txt` loses formatting — that is its purpose.
+- With `/tools` files grow quickly: a single turn can hold 60+ calls.
+- Images and binaries are not exported — only names, types and sizes.
+- The tool is not affiliated with Z.ai and is not an official export feature.
 
-## Если что-то не работает
+## Troubleshooting
 
-| Симптом | Причина и решение |
+| Symptom | Cause and fix |
 | --- | --- |
-| В консоли только слово `Python` | Сработала заглушка Microsoft Store. Запускайте `export_chat.bat` — он берёт Python из AutoClaw |
-| `Диалог не найден` | Название могло измениться. Посмотрите `--list` и укажите id |
-| Пустой список диалогов | Другой профиль или аккаунт. Укажите путь вручную: `--db "C:\...\runtime.sqlite"` |
-| Файл не создался | Проверьте права на папку и что путь в `--out` существует |
+| Console prints only `Python` | The Microsoft Store stub was invoked. Run `export_chat.bat`, it takes Python from AutoClaw |
+| `Conversation not found` | The title may have changed. Check `/list` and use the id |
+| Empty conversation list | Wrong profile or account. Pass the path manually: `/db "C:\...\runtime.sqlite"` |
+| File was not created | Check folder permissions and that the `/out` path exists |
 
-## Лицензия
+## Links
 
-MIT — см. файл `LICENSE`.
+Repository: <https://github.com/vadimrm/AutoClaw.Z.ai-ExportChat>
 
-Авторы: Vadim Madgazin, AutoClaw.Z.ai
+## License
+
+MIT — see the `LICENSE` file.
+
+Authors: Vadim Madgazin, AutoClaw.Z.ai

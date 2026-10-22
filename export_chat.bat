@@ -31,7 +31,7 @@ if not defined PY (
 
 if not exist "%SCRIPT%" (
   echo [ERROR] export_chat.py not found next to this .bat
-  echo Rename export_chat_v4.py to export_chat.py and try again.
+  echo Put export_chat.py and export_chat.bat in the same folder.
   pause
   exit /b 1
 )

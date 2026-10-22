@@ -1,25 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Экспорт диалогов AutoClaw в Markdown / TXT / JSON. Версия 4.
+"""AutoClaw.Z.ai-ExportChat — export AutoClaw chats to Markdown, TXT and JSON.
 
-Читает базу рантайма приложения (runtime.sqlite, таблицы work_sessions и
-neutral_session_entries) в режиме только-чтение и складывает переписку в один
-файл.
+Reads the local AutoClaw runtime database (read-only) and saves a conversation
+to a single file: Markdown, plain text or JSON.
 
-Что нового в v4:
-  * разделитель — 60 дефисов вместо 30;
-  * BOM (EF BB BF) в начале создаваемых файлов: для md и txt по умолчанию,
-    для json — только по флагу --bom;
-  * запускатор работает с единственным именем export_chat.py (v2, v3, v4 —
-    это архивные копии).
-
-Примеры:
-    python export_chat.py --list
-    python export_chat.py                          # самый свежий диалог
-    python export_chat.py --session кредит         # по части названия или id
-    python export_chat.py --session bb5900ba --out chat.md --tools
-    python export_chat.py --session Kimi --format txt --out chat.txt
-    python export_chat.py --all --out-dir exports
+Version: 1.1
+Repository: https://github.com/vadimrm/AutoClaw.Z.ai-ExportChat
 """
 
 from __future__ import annotations
@@ -33,7 +20,157 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-__version__ = "4.0"
+__version__ = "1.1"
+REPO_URL = "https://github.com/vadimrm/AutoClaw.Z.ai-ExportChat"
+
+LANG = "ru"
+
+LABELS = {
+    "ru": {
+        "session": "Сессия",
+        "created": "Создана",
+        "updated": "Обновлена",
+        "messages": "Сообщений",
+        "files": "Файлы",
+        "exported": "Экспорт",
+        "you": "Вы",
+        "answer": "ОТВЕТ",
+        "attached": "📎 Вложено:",
+        "ready": "📄 Готово к скачиванию:",
+        "other": "🗂 Прочие файлы:",
+        "attached_txt": "Вложено:",
+        "ready_txt": "Готово к скачиванию:",
+        "other_txt": "Прочие файлы:",
+        "tools": "Инструменты",
+        "call": "Вызов",
+        "result": "Результат",
+        "truncated": "… (обрезано, всего {size})",
+        "empty_request": "[пустой запрос]",
+        "db": "База:",
+        "done": "Готово:",
+        "conversation": "Диалог:",
+        "err_db_missing": "Файл базы не найден: {p}",
+        "err_no_db": "Не нашёл runtime.sqlite. Укажите путь вручную: --db <путь>",
+        "err_no_sessions": "В базе нет ни одного диалога.",
+        "err_ambiguous": "Подходит несколько диалогов, уточните:\n{lines}",
+        "err_not_found": "Диалог не найден: {needle}",
+        "err_empty": "В диалоге нет сообщений: {id}",
+        "lbl_done": "Готово: {path}",
+        "lbl_conversation": "Диалог: {title}  ({count})",
+    },
+    "en": {
+        "session": "Session",
+        "created": "Created",
+        "updated": "Updated",
+        "messages": "Messages",
+        "files": "Files",
+        "exported": "Exported",
+        "you": "You",
+        "answer": "ANSWER",
+        "attached": "📎 Attached:",
+        "ready": "📄 Ready to download:",
+        "other": "🗂 Other files:",
+        "attached_txt": "Attached:",
+        "ready_txt": "Ready to download:",
+        "other_txt": "Other files:",
+        "tools": "Tools",
+        "call": "Call",
+        "result": "Result",
+        "truncated": "… (truncated, {size} total)",
+        "empty_request": "[empty request]",
+        "db": "Database:",
+        "done": "Done:",
+        "conversation": "Conversation:",
+        "err_db_missing": "Database file not found: {p}",
+        "err_no_db": "runtime.sqlite not found. Pass it explicitly: --db <path>",
+        "err_no_sessions": "No conversations found in the database.",
+        "err_ambiguous": "Several conversations match, please specify:\n{lines}",
+        "err_not_found": "Conversation not found: {needle}",
+        "err_empty": "No messages in the conversation: {id}",
+        "lbl_done": "Done: {path}",
+        "lbl_conversation": "Conversation: {title}  ({count})",
+    },
+    "zh": {
+        "session": "会话",
+        "created": "创建时间",
+        "updated": "更新时间",
+        "messages": "消息",
+        "files": "文件",
+        "exported": "导出时间",
+        "you": "你",
+        "answer": "回答",
+        "attached": "📎 附件：",
+        "ready": "📄 可下载：",
+        "other": "🗂 其他文件：",
+        "attached_txt": "附件：",
+        "ready_txt": "可下载：",
+        "other_txt": "其他文件：",
+        "tools": "工具调用",
+        "call": "调用",
+        "result": "结果",
+        "truncated": "…（已截断，共 {size}）",
+        "empty_request": "[空请求]",
+        "db": "数据库：",
+        "done": "完成：",
+        "conversation": "对话：",
+        "err_db_missing": "找不到数据库文件：{p}",
+        "err_no_db": "未找到 runtime.sqlite。请手动指定：--db <路径>",
+        "err_no_sessions": "数据库中没有对话。",
+        "err_ambiguous": "匹配到多个对话，请明确指定：\n{lines}",
+        "err_not_found": "找不到对话：{needle}",
+        "err_empty": "该对话没有消息：{id}",
+        "lbl_done": "完成：{path}",
+        "lbl_conversation": "对话：{title}  ({count})",
+    },
+}
+
+
+def t(key: str, **kwargs) -> str:
+    table = LABELS.get(LANG) or LABELS["ru"]
+    value = table.get(key) or LABELS["ru"].get(key, key)
+    return value.format(**kwargs) if kwargs else value
+
+
+SHORT_HELP = f"""AutoClaw.Z.ai-ExportChat {__version__} — export AutoClaw chats to Markdown, TXT and JSON
+
+Main options:
+  /list                  list all conversations
+  /chat <id|title>       export one conversation (by id or part of its title)
+  /out <file>            output file name
+  /all                   export every conversation
+  /format md|txt|json    output format (default: md)
+  /lang ru|en|zh         language of labels in the output (default: ru)
+  /tools                 include tool calls with arguments and results
+  /no-files              hide attached and created files
+  /ver                   show version
+  /help                  full help (Russian)
+
+Repository: {REPO_URL}
+"""
+
+ARG_ALIASES = {
+    "/h": "--help",
+    "/?": "--help",
+    "/help": "--help",
+    "/v": "--ver",
+    "/ver": "--ver",
+    "/version": "--ver",
+}
+
+
+def normalize_args(argv: list[str]) -> list[str]:
+    """Превращает виндовые ключи /key в понятные argparse --key."""
+    normalized: list[str] = []
+    for token in argv:
+        lowered = token.lower()
+        if lowered in ARG_ALIASES:
+            normalized.append(ARG_ALIASES[lowered])
+            continue
+        if re.fullmatch(r"/[A-Za-z][\w-]*", token):
+            normalized.append("--" + token[1:])
+            continue
+        normalized.append(token)
+    return normalized
 
 APP_DIR_NAMES = (
     "AutoClaw-oversea-official",
@@ -68,7 +205,7 @@ def find_db(explicit: str | None) -> Path:
     if explicit:
         p = Path(explicit).expanduser()
         if not p.is_file():
-            raise SystemExit(f"Файл базы не найден: {p}")
+            raise SystemExit(t("err_db_missing", p=p))
         return p
 
     candidates: list[Path] = []
@@ -80,9 +217,7 @@ def find_db(explicit: str | None) -> Path:
         candidates += list(acc_root.glob("*/runtime/runtime.sqlite"))
 
     if not candidates:
-        raise SystemExit(
-            "Не нашёл runtime.sqlite. Укажите путь вручную: --db <путь>"
-        )
+        raise SystemExit(t("err_no_db"))
     return max(candidates, key=lambda p: p.stat().st_mtime)
 
 
@@ -118,7 +253,7 @@ def load_sessions(con: sqlite3.Connection) -> list[sqlite3.Row]:
 
 def pick_session(sessions: list[sqlite3.Row], needle: str | None) -> sqlite3.Row:
     if not sessions:
-        raise SystemExit("В базе нет ни одного диалога.")
+        raise SystemExit(t("err_no_sessions"))
     if not needle:
         return sessions[0]
 
@@ -134,8 +269,8 @@ def pick_session(sessions: list[sqlite3.Row], needle: str | None) -> sqlite3.Row
         return by_title[0]
     if len(by_title) > 1:
         lines = "\n".join(f"  {s['session_id']}  {s['title']}" for s in by_title)
-        raise SystemExit(f"Подходит несколько диалогов, уточните:\n{lines}")
-    raise SystemExit(f"Диалог не найден: {needle}")
+        raise SystemExit(t("err_ambiguous", lines=lines))
+    raise SystemExit(t("err_not_found", needle=needle))
 
 
 def parse_payload(raw: str) -> dict:
@@ -229,11 +364,17 @@ def parse_attachments(prompt: str) -> list[dict]:
 def format_size(size: int | None) -> str:
     if not size or size < 0:
         return ""
+    units = {
+        "ru": ("Б", "КБ", "МБ", ","),
+        "en": ("B", "KB", "MB", "."),
+        "zh": ("B", "KB", "MB", "."),
+    }
+    small, kilo, mega, dot = units.get(LANG, units["en"])
     if size < 1024:
-        return f"{size} Б"
+        return f"{size} {small}"
     if size < 1024 * 1024:
-        return f"{size / 1024:.1f} КБ".replace(".", ",")
-    return f"{size / (1024 * 1024):.1f} МБ".replace(".", ",")
+        return f"{size / 1024:.1f} {kilo}".replace(".", dot)
+    return f"{size / (1024 * 1024):.1f} {mega}".replace(".", dot)
 
 
 def file_kind(name: str) -> str:
@@ -408,6 +549,45 @@ def plural(n: int, one: str, few: str, many: str) -> str:
     return many
 
 
+def n_requests(n: int) -> str:
+    if LANG == "ru":
+        return f"{n} {plural(n, 'запрос', 'запроса', 'запросов')}"
+    if LANG == "zh":
+        return f"{n} 个请求"
+    return f"{n} request" if n == 1 else f"{n} requests"
+
+
+def n_answers(n: int) -> str:
+    if LANG == "ru":
+        return f"{n} {plural(n, 'ответ', 'ответа', 'ответов')}"
+    if LANG == "zh":
+        return f"{n} 个回答"
+    return f"{n} answer" if n == 1 else f"{n} answers"
+
+
+def messages_line(requests: int, answers: int) -> str:
+    if LANG == "zh":
+        return f"{requests} 个请求，{answers} 个回答"
+    return f"{n_requests(requests)}, {n_answers(answers)}"
+
+
+def files_line(attached: int, ready: int, other: int | None = None) -> str:
+    if LANG == "ru":
+        text = f"вложено {attached} · готово к скачиванию {ready}"
+        if other is not None:
+            text += f" · прочих созданных {other}"
+        return text
+    if LANG == "zh":
+        text = f"附件 {attached} · 可下载 {ready}"
+        if other is not None:
+            text += f" · 其他文件 {other}"
+        return text
+    text = f"{attached} attached · {ready} ready to download"
+    if other is not None:
+        text += f" · {other} other files"
+    return text
+
+
 def human_size(text: str) -> str:
     return f"{len(text)} симв."
 
@@ -417,7 +597,7 @@ def render_tool(tool: dict, limit: int) -> str:
     parts = [head]
     if tool["input"] not in (None, {}, []):
         payload = json.dumps(tool["input"], ensure_ascii=False, indent=2)
-        parts.append("\n**Вызов**\n\n```json\n" + payload + "\n```\n")
+        parts.append("\n**" + t("call") + "**\n\n```json\n" + payload + "\n```\n")
     output = tool["output"]
     if isinstance(output, str) and output.strip():
         body = output.strip()
@@ -428,8 +608,8 @@ def render_tool(tool: dict, limit: int) -> str:
     if body:
         cut = body[:limit]
         if len(body) > limit:
-            cut += f"\n… (обрезано, всего {human_size(body)})"
-        parts.append("\n**Результат**\n\n```text\n" + cut + "\n```\n")
+            cut += "\n" + t("truncated", size=human_size(body))
+        parts.append("\n**" + t("result") + "**\n\n```text\n" + cut + "\n```\n")
     parts.append("</details>\n")
     return "".join(parts)
 
@@ -439,7 +619,7 @@ def session_meta(session: sqlite3.Row, turns: list[dict]) -> dict:
     files = dedupe_files([f for t in turns for f in t["created"]])
     return {
         "id": session["session_id"],
-        "title": (session["title"] or "").strip() or "Диалог AutoClaw",
+        "title": (session["title"] or "").strip() or "AutoClaw",
         "created_at": session["created_at"],
         "updated_at": session["updated_at"],
         "created_local": local_time(session["created_at"]),
@@ -514,6 +694,22 @@ def md_to_text(text: str) -> str:
     return text.strip("\n")
 
 
+def text_file_row(item: dict) -> str:
+    return (
+        f'  - "{item["name"]}" ({file_kind(item["name"])}, '
+        f"{format_size(item['size'])})\n"
+    )
+
+
+def md_file_row(item: dict) -> str:
+    meta = ", ".join(
+        part
+        for part in (file_kind(item["name"]), format_size(item["size"]))
+        if part
+    )
+    return f'- "{item["name"]}" — {meta}\n'
+
+
 def render_text(
     session: sqlite3.Row,
     turns: list[dict],
@@ -523,49 +719,44 @@ def render_text(
     meta = session_meta(session, turns)
     out: list[str] = []
     out.append(f"{meta['title']}\n")
-    out.append(f"Сессия: {meta['id']}\n")
-    out.append(f"Создана: {meta['created_local']}\n")
-    out.append(f"Обновлена: {meta['updated_local']}\n")
-    out.append(f"Сообщений: {meta['requests']} / ответов: {meta['answers']}\n")
+    out.append(f"{t('session')}: {meta['id']}\n")
+    out.append(f"{t('created')}: {meta['created_local']}\n")
+    out.append(f"{t('updated')}: {meta['updated_local']}\n")
     out.append(
-        f"Файлы: вложено {len(meta['attachments'])}, "
-        f"готово к скачиванию {len(meta['delivered'])}\n"
+        f"{t('messages')}: {messages_line(meta['requests'], meta['answers'])}\n"
+    )
+    out.append(
+        f"{t('files')}: "
+        f"{files_line(len(meta['attachments']), len(meta['delivered']))}\n"
     )
     out.append("\n" + "-" * 60 + "\n")
 
     for index, turn in enumerate(turns, 1):
-        out.append(f"\n[{index}] ВЫ — {local_time(turn['request_at'])}\n")
-        out.append((md_to_text(turn["request"]) or "[пустой запрос]") + "\n")
+        out.append(
+            f"\n[{index}] {t('you').upper()} — {local_time(turn['request_at'])}\n"
+        )
+        out.append((md_to_text(turn["request"]) or t("empty_request")) + "\n")
         if with_files and turn["attachments"]:
-            out.append("\nВложено:\n")
+            out.append("\n" + t("attached_txt") + "\n")
             for item in turn["attachments"]:
-                out.append(
-                    f'  - "{item["name"]}" ({file_kind(item["name"])}, '
-                    f"{format_size(item['size'])})\n"
-                )
+                out.append(text_file_row(item))
 
         for answer in turn["answers"]:
             stamp = local_time(answer["at"])
-            out.append(f"\nОТВЕТ — {stamp}\n")
+            out.append(f"\n{t('answer')} — {stamp}\n")
             out.append(md_to_text(answer["text"]) + "\n")
 
         if with_files and turn["created"]:
             delivered = [f for f in turn["created"] if f["delivered"]]
             other = [f for f in turn["created"] if not f["delivered"]]
             if delivered:
-                out.append("\nГотово к скачиванию:\n")
+                out.append("\n" + t("ready_txt") + "\n")
                 for item in delivered:
-                    out.append(
-                        f'  - "{item["name"]}" ({file_kind(item["name"])}, '
-                        f"{format_size(item['size'])})\n"
-                    )
+                    out.append(text_file_row(item))
             if all_files and other:
-                out.append("\nПрочие файлы:\n")
+                out.append("\n" + t("other_txt") + "\n")
                 for item in other:
-                    out.append(
-                        f'  - "{item["name"]}" ({file_kind(item["name"])}, '
-                        f"{format_size(item['size'])})\n"
-                    )
+                    out.append(text_file_row(item))
 
     return "".join(out)
 
@@ -644,7 +835,7 @@ def render_markdown(
     with_files: bool = True,
     all_files: bool = False,
 ) -> str:
-    title = (session["title"] or "").strip() or "Диалог AutoClaw"
+    title = (session["title"] or "").strip() or "AutoClaw"
     answers = sum(len(t["answers"]) for t in turns)
     attached_all = dedupe_files([a for t in turns for a in t["attachments"]])
     created_all = dedupe_files([f for t in turns for f in t["created"]])
@@ -654,47 +845,34 @@ def render_markdown(
     out: list[str] = []
     out.append(f"# {title}\n\n")
     out.append("---\n")
-    out.append(f"- **Сессия:** \"{session['session_id']}\"\n")
-    out.append(f"- **Создана:** {local_time(session['created_at'])}\n")
-    out.append(f"- **Обновлена:** {local_time(session['updated_at'])}\n")
-    out.append(
-        f"- **Сообщений:** {len(turns)} "
-        f"{plural(len(turns), 'запрос', 'запроса', 'запросов')}, {answers} "
-        f"{plural(answers, 'ответ', 'ответа', 'ответов')}\n"
+    out.append(f"- **{t('session')}:** \"{session['session_id']}\"\n")
+    out.append(f"- **{t('created')}:** {local_time(session['created_at'])}\n")
+    out.append(f"- **{t('updated')}:** {local_time(session['updated_at'])}\n")
+    out.append(f"- **{t('messages')}:** {messages_line(len(turns), answers)}\n")
+    files_text = files_line(
+        len(attached_all),
+        len(delivered_all),
+        len(other_all) if all_files else None,
     )
-    files_line = (
-        f"- **Файлы:** вложено {len(attached_all)} · "
-        f"готово к скачиванию {len(delivered_all)}"
-    )
-    if all_files:
-        files_line += f" · прочих созданных {len(other_all)}"
-    out.append(files_line + "\n")
+    out.append(f"- **{t('files')}:** {files_text}\n")
     out.append(
-        f"- **Экспорт:** {datetime.now().strftime('%d.%m.%Y %H:%M')}\n"
+        f"- **{t('exported')}:** {datetime.now().strftime('%d.%m.%Y %H:%M')}\n"
     )
     out.append("\n---\n")
 
     for index, turn in enumerate(turns, 1):
         out.append(
-            f"\n## {index}. Вы — {local_time(turn['request_at'])}\n\n"
+            f"\n## {index}. {t('you')} — {local_time(turn['request_at'])}\n\n"
         )
-        out.append((turn["request"] or "_[пустой запрос]_") + "\n")
+        out.append((turn["request"] or f"_{t('empty_request')}_") + "\n")
 
         if with_files and turn["attachments"]:
-            out.append("\n**📎 Вложено:**\n")
+            out.append(f"\n**{t('attached')}**\n")
             for item in turn["attachments"]:
-                meta = ", ".join(
-                    part
-                    for part in (
-                        file_kind(item["name"]),
-                        format_size(item["size"]),
-                    )
-                    if part
-                )
-                out.append(f'- "{item["name"]}" — {meta}\n')
+                out.append(md_file_row(item))
 
         if with_tools and turn["tools"]:
-            out.append(f"\n**Инструменты: {len(turn['tools'])}**\n\n")
+            out.append(f"\n**{t('tools')}: {len(turn['tools'])}**\n\n")
             for tool in turn["tools"]:
                 out.append(render_tool(tool, tool_limit) + "\n")
 
@@ -711,29 +889,13 @@ def render_markdown(
             delivered = [f for f in turn["created"] if f["delivered"]]
             other = [f for f in turn["created"] if not f["delivered"]]
             if delivered:
-                out.append("\n**📄 Готово к скачиванию:**\n")
+                out.append(f"\n**{t('ready')}**\n")
                 for item in delivered:
-                    meta = ", ".join(
-                        part
-                        for part in (
-                            file_kind(item["name"]),
-                            format_size(item["size"]),
-                        )
-                        if part
-                    )
-                    out.append(f'- "{item["name"]}" — {meta}\n')
+                    out.append(md_file_row(item))
             if all_files and other:
-                out.append("\n**🗂 Прочие файлы:**\n")
+                out.append(f"\n**{t('other')}**\n")
                 for item in other:
-                    meta = ", ".join(
-                        part
-                        for part in (
-                            file_kind(item["name"]),
-                            format_size(item["size"]),
-                        )
-                        if part
-                    )
-                    out.append(f'- "{item["name"]}" — {meta}\n')
+                    out.append(md_file_row(item))
 
     return "".join(out)
 
@@ -753,7 +915,7 @@ def export_one(
     artifacts = load_artifacts(con, session["session_id"])
     turns = build_turns(con, session["session_id"], artifacts)
     if not turns:
-        raise SystemExit(f"В диалоге нет сообщений: {session['session_id']}")
+        raise SystemExit(t("err_empty", id=session["session_id"]))
     if fmt == "json":
         body = render_json(session, turns, with_files, all_files)
     elif fmt == "txt":
@@ -763,26 +925,44 @@ def export_one(
             session, turns, with_tools, with_narration, tool_limit, with_files, all_files
         )
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    use_bom = bom == "always" or (bom == "auto" and fmt != "json")
+    use_bom = fmt != "json" and bom != "never"
     out_path.write_text(body, encoding="utf-8-sig" if use_bom else "utf-8")
     return out_path, len(turns)
 
 
 def main() -> int:
+    global LANG
+
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(errors="replace")
         except Exception:
             pass
 
+    argv = normalize_args(sys.argv[1:])
+    if not argv:
+        print(SHORT_HELP)
+        return 0
+
     ap = argparse.ArgumentParser(
-        description="Экспорт диалога AutoClaw в Markdown",
+        description=(
+            f"AutoClaw.Z.ai-ExportChat {__version__} — "
+            "экспорт диалогов AutoClaw в Markdown, TXT и JSON"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
     )
-    ap.add_argument("--version", action="version", version=f"export_chat {__version__}")
+    ap.add_argument(
+        "-h", "--help", action="store_true", dest="show_help",
+        help="показать эту справку и выйти",
+    )
+    ap.add_argument(
+        "-v", "--ver", action="version", version=f"AutoClaw.Z.ai-ExportChat {__version__}",
+        help="показать версию",
+    )
     ap.add_argument("--db", help="путь к runtime.sqlite")
     ap.add_argument("--list", action="store_true", help="показать список диалогов")
-    ap.add_argument("--session", help="id или часть названия диалога")
+    ap.add_argument("--chat", help="id или часть названия диалога")
     ap.add_argument("--out", help="файл назначения (.md)")
     ap.add_argument("--all", action="store_true", help="выгрузить все диалоги")
     ap.add_argument("--out-dir", default="chat-exports", help="папка для --all")
@@ -805,36 +985,44 @@ def main() -> int:
         default="md",
         help="формат экспорта (по умолчанию md)",
     )
-    bom_group = ap.add_mutually_exclusive_group()
-    bom_group.add_argument(
-        "--bom",
-        dest="bom",
-        action="store_const",
-        const="always",
-        help="добавлять BOM (EF BB BF) во все форматы, включая json",
-    )
-    bom_group.add_argument(
+    ap.add_argument(
         "--no-bom",
-        dest="bom",
-        action="store_const",
-        const="never",
-        help="не добавлять BOM",
+        action="store_true",
+        help="не добавлять BOM (EF BB BF) в начало md и txt файлов",
     )
-    ap.set_defaults(bom="auto")
+    ap.add_argument(
+        "--lang",
+        choices=("ru", "en", "zh"),
+        default="ru",
+        help="язык подписей в выводе: ru (по умолчанию), en, zh",
+    )
     ap.add_argument(
         "--tool-limit",
         type=int,
         default=4000,
         help="сколько символов результата инструмента оставлять (по умолчанию 4000)",
     )
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+    LANG = args.lang
+    args.bom = "never" if args.no_bom else "always"
+
+    if args.show_help:
+        help_text = ap.format_help()
+        help_text = help_text.replace("usage:", "использование:")
+        help_text = help_text.replace("options:", "ключи:")
+        help_text = help_text.replace("--", "/")
+        help_text = help_text.replace("[-h]", "[/h]").replace("[-v]", "[/v]")
+        help_text = help_text.replace("-h, /help", "/h, /help")
+        help_text = help_text.replace("-v, /ver", "/v, /ver")
+        print(help_text)
+        return 0
 
     db = find_db(args.db)
     con = connect(db)
     sessions = load_sessions(con)
 
     if args.list:
-        print(f"База: {db}\n")
+        print(f"{t('db')} {db}\n")
         for s in sessions:
             turns = con.execute(
                 "select count(*) from neutral_session_entries where session_id=? and entry_type='request'",
@@ -842,12 +1030,12 @@ def main() -> int:
             ).fetchone()[0]
             print(
                 f"{s['session_id']}  {local_time(s['updated_at'])}  "
-                f"{turns:>3} запр.  {s['title']}"
+                f"{turns:>3}  {s['title']}"
             )
         return 0
 
     if not sessions:
-        raise SystemExit("В базе нет диалогов.")
+        raise SystemExit(t("err_no_sessions"))
 
     if args.all:
         out_dir = Path(args.out_dir)
@@ -865,10 +1053,10 @@ def main() -> int:
                 args.fmt,
                 args.bom,
             )
-            print(f"{path}  ({count} {plural(count, 'запрос', 'запроса', 'запросов')})")
+            print(f"{path}  ({n_requests(count)})")
         return 0
 
-    session = pick_session(sessions, args.session)
+    session = pick_session(sessions, args.chat)
     if args.out:
         out_path = Path(args.out)
     else:
@@ -889,8 +1077,8 @@ def main() -> int:
         args.fmt,
         args.bom,
     )
-    print(f"Готово: {path.resolve()}")
-    print(f"Диалог: {session['title']}  ({count} {plural(count, 'запрос', 'запроса', 'запросов')})")
+    print(t("lbl_done", path=path.resolve()))
+    print(t("lbl_conversation", title=session["title"], count=n_requests(count)))
     return 0
 
 
